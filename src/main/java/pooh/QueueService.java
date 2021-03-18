@@ -1,40 +1,21 @@
 package pooh;
 
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class QueueService implements Service {
-    final ConcurrentHashMap<String, LinkedList<String>> queue = new ConcurrentHashMap<>();
-    final Map<String, Function<Req, Resp>> processor = new HashMap<>();
-    {
-        processor.put("POST", (req) -> {
-            queue.compute(req.gettype(), (k, data) -> {
-                if (data == null) {
-                    data = new LinkedList<>();
-                }
-                data.add(req.getdata());
-                return data;
-            });
-            return new Resp(String.format("Added in %s with type %s: %s", req.getmode(), req.gettype(), req.getdata()), Resp.OK);
-        });
+    private final ConcurrentHashMap<String, ConcurrentLinkedQueue<String>> queue = new ConcurrentHashMap<>();
 
-        processor.put("GET", (req) -> {
-            String[] res = {null};
-            queue.compute(req.gettype(), (k, data) -> {
-                if (data != null) {
-                    res[0] = data.poll();
-                }
-                return data;
-            });
-
-            return new Resp(res[0] == null ? "There is nothing for you" : res[0], Resp.OK);
-        });
-    }
     @Override
     public Resp process(Req req) {
-        return processor.get(req.getmethod()).apply(req);
+        String nameQueue = req.gettype();
+        if (req.getmethod().equals("POST")) {
+            queue.putIfAbsent(nameQueue, new ConcurrentLinkedQueue<>());
+            queue.get(nameQueue).add(req.getdata());
+            return new Resp(String.format("Added in %s with type %s client %s: %s", req.getmode(), req.gettype(), req.getClient(), req.getdata()), Resp.OK);
+        } else {
+            String text = queue.getOrDefault(nameQueue, new ConcurrentLinkedQueue<>()).poll();
+            return new Resp(text == null ? "There is nothing for you" : text, Resp.OK);
+        }
     }
 }
